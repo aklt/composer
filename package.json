@@ -3,7 +3,7 @@
   "description": "Compose synchronous and asynchronous functions to get new functions, yay!",
   "version": "0.1.0",
   "keywords": [ "Composing", "functions", "shell", "tool" ],
-  "author""   "Anders Thøgersen <anders@bladre.dk>",
+  "author":   "Anders Thøgersen <anders@bladre.dk>",
   "licenses": [ "MIT" ],
   "engines": {"node": ">=0.4.0"},
   "repositories": {
