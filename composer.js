@@ -1,5 +1,5 @@
 /*
- * Date: 27-Mar-2011
+ * Date: 29-Mar-2011
  * Author: Anders Thøgersen
  * email: NaOnSdPeArMslt@gmail.com -- remove NOSPAM
  */
@@ -25,7 +25,7 @@ var fs     = require('fs'),
 */
 function compose(/* ... */) {
     var run = [].slice.call(arguments),
-        context;
+    context;  
     
     if (typeof run[0] === 'object') {
         context = run.shift();
@@ -48,10 +48,14 @@ function compose(/* ... */) {
 *     var fn  = acompose(errorFunc, asyncFun1, asyncFun2, ..., syncFunc),
 *         res = fn(arg1, arg2, ...);
 */
-function acomposeHelper(args) {
-    var onError  = args.shift();
+function acomposeMaker(args) {
+    var onError,
+        run = [];
 
-    var run = [];
+    if (! exports.__error) {
+        onError  = args.shift();
+    }
+
     for (var i = 0, i_max = args.length; i < i_max; i += 1) {
         run[i] = function (/* args */) { 
             var that = this,
@@ -80,7 +84,7 @@ function acomposeHelper(args) {
 
 function acompose() {
     var args = [].slice.call(arguments),
-        fn   = acomposeHelper(args);
+        fn   = acomposeMaker(args);
 
     return function () {
         var vars = [].slice.call(arguments);
@@ -105,29 +109,46 @@ var esc = String.fromCharCode(27),
     'green-hi'  : [92, 32],
 };
 
+function isArray(arg) {
+    return Object.prototype.toString.call(arg) === '[object Array]';
+}
+
+function pass(func, arg) {
+    if (isArray(arg)) {
+        return arg.map(func);
+    }
+    return func.call(arg);
+}
+
+var sprot = String.prototype;
+
+
+// Shell access:
+// Left to right
+// input may be stream or string: $(_pipe(_cmd('cat file')
+
 
 // String functions
 module.exports = {
     // Composing
     $: compose,
     _: acompose,
+    errorFunction: function (errFun) {
+        this.__error = errFun;
+    },
     // String functions
-    $upper: function () {
-        return function (string) {
-            return string.toLocaleUpperCase();
-        };
+    $upper: function (value) {
+        return pass(sprot.toLocaleUpperCase, value);
     },
-    $lower: function () {
-        return function (string) {
-            return string.toLocaleLowerCase();
-        };
+    $lower: function (value) {
+        return pass(sprot.toLocaleLowerCase, value);
     },
-    $ucfirst: function () {
-        return function (string) {
+    $ucfirst: function (value) {
+        return pass(function (string) {
             var first = string[0].toLocaleUpperCase(),
             rest  = string.slice(1);
             return [first, rest].join('');
-        };
+        }, value);
     },
     $concat: function (arg) {
         return function (string) {
@@ -139,21 +160,19 @@ module.exports = {
             return arg.split(rx);
         };
     },
-    $trim: function (string) {
-        return string.trim();
+    $trim: function (value) {
+        return pass(sprot.trim, value);
     },
-    $trimLeft: function (string) {
-        return string.trimLeft();
+    $trimLeft: function (value) {
+        return pass(sprot.trimLeft, value);
     },
-    $length: function () {
-        return function (string) {
+    $length: function (value) {
+        return pass(function (string) {
             return string.length;
-        };
+        }, value);
     },
-    $trimRight: function () {
-        return function (string) {
-            return string.trimRight();
-        };
+    $trimRight: function (value) {
+        return pass(sprot.trimRight, value);
     },
     $replace: function (find, replacement) {
         return function (string) {
@@ -198,14 +217,14 @@ module.exports = {
             return string.anchor(url);
         };
     },
-    $italics: function (string) {
-        return string.italics();
+    $italics: function (value) {
+        return pass(sprot.italics, value);
     },
-    $fixed: function (string) {
-        return string.fixed();
+    $fixed: function (value) {
+        return pass(sprot.fixed, value);
     },
-    $bold: function (string) {
-        return string.bold();
+    $bold: function (value) {
+        return pass(sprot.bold, value);
     },
     // Other string functions
     $prefix: function (str) {
@@ -312,7 +331,7 @@ module.exports = {
     // Apply the function on each element of an array or on a single arg
     $each: function (func) {
         return function (arg) {
-            if (Object.prototype.toString.call(arg) === '[object Array]') {
+            if (isArray(arg)) {
                 return arg.map(func);
             }
             return func(arg);
@@ -350,10 +369,8 @@ module.exports = {
             return val || that;
         };
     },
-    $not: function () {
-        return function (val) {
-            return !(!!val);
-        };
+    $not: function (val) {
+        return !(!!val);
     },
     // Other logic
     $cond: function (conds) {
@@ -384,13 +401,16 @@ module.exports = {
     },
     // End functions
     $string: function (arg) {
+        if (typeof arg === 'object') {
+            if (arg instanceof Buffer) {
+                return arg.toString();
+            }
+            return JSON.stringify(arg, false, 10);
+        }
         return arg.toString();
     },
     $number: function (arg) {
         return parseInt(arg, 10);
-    },
-    $empty: function () {
-        return;
     },
     // Curry helpers
     // Pass argument as the pos parameter
@@ -417,14 +437,63 @@ module.exports = {
 
     },
     _exec: function (cmd) {
-        childp.exec(cmd, function (err, stdout, stderr) {
-            if (err) {
-                cb('Exec failed: ' + stderr);
-            }
-            cb(stdout);
-        });
+        return function (str) {
+            var run = cmd.replace('$1', '"' + str + '"')
+            childp.exec(run, function (err, stdout, stderr) {
+                if (err) {
+                    cb('Exec failed: ' + stderr);
+                }
+                cb(stdout);
+            });
+        }
     },
-    _pipe: 23,
+    _pipe: function (cmd) {
+
+        var that = this;
+
+        return function (proc) {
+            var to = that._run(cmd)();
+            proc.stdout.on('data', function (buf) {
+                console.log(proc, to);
+                to.stdin.write(buf);
+            });
+            proc.stdout.on('end', function () {
+                proc.stdout.end();
+            });
+            proc.stdout.on('error', function (err) {
+                throw "TODO Here";
+            });
+            return to.stdout;
+        };
+
+    },
+    _log: function (stream) {
+        // log(stream);
+        stream.on('data', log);
+        stream.on('end', log);
+        stream.on('error', function () {
+            var args = [].slice.call(arguments);
+            log(args);
+        });
+        stream.resume();
+    },
+    _run: function (cmd) {
+        var args  = [].slice.call(arguments),
+            first = args[0].split(/ /),
+            cmd   = first.shift();
+
+        first.concat(args.slice(1));
+
+        log(first);
+
+        return function (/* more args */) {
+            var more = [].slice.call(arguments);
+            first.concat(more);
+            var result = childp.spawn(cmd, first);
+            result.pause();
+            return result.stdout;
+        };
+    },
     $it: function () {
         var args = [].slice.call(arguments);
         if (args.length > 0) {

@@ -1,5 +1,16 @@
+#!/usr/bin/env node
+var _      = require('underscore'),
+    b      = require('backbone'),
+    fs     = require('fs'),
+    path   = require('path'),
+    util   = require('util'),
+    assert = require('assert'),
+    log    = console.log
+    ;
+
+ 
 /*
- * Date: 26-Mar-2011
+ * Date: 29-Mar-2011
  * Author: Anders Thøgersen
  * email: NaOnSdPeArMslt@gmail.com -- remove NOSPAM
  */
