@@ -1,13 +1,12 @@
 #!/usr/bin/env node
 
 /*
- * Date: 29-Mar-2011
+ * Date: 05-Apr-2011
  * Author: Anders Thøgersen
  * email: NaOnSdPeArMslt@gmail.com -- remove NOSPAM
  */
 
 var _       = require('underscore'),
-    b       = require('backbone'),
     fs      = require('fs'),
     path    = require('path'),
     util    = require('util'),
@@ -71,21 +70,9 @@ filterFile('testfile', 'testfile-filtered');
 // Read a file with a list of files, stat the files and write the stats to a new file
 with (composer) {
     var statDirs = function (infile, outfile) {
-        _(errFun, _exists, fs.readFile, $($string, $split(/[\n\r]+/), $filter(/./), 
+        _(errFun, _exists, fs.readFile, $($string, $split(/[\n\r]+/), $filter(/./),
         _each(msgFun, fs.stat, $($string, _(errFun, $pass(fs.writeFile, outfile))))))(infile);
     };
 }
 statDirs('statdirs.txt', 'statdirs.out');
-
-
-
-// // TODO
-// Use the shell to get the filenames of some files that contain a string
-with (composer) {
-    var getFiles = function (string) {
-        $(_run('grep -i ' + string + ' *'), _log)(string);
-    };
-}
-
-getFiles('lorem');
 

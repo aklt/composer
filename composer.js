@@ -1,5 +1,5 @@
 /*
- * Date: 29-Mar-2011
+ * Date: 05-Apr-2011
  * Author: Anders Thøgersen
  * email: NaOnSdPeArMslt@gmail.com -- remove NOSPAM
  */
@@ -7,7 +7,6 @@
 
 // TODO - All functions shuold take a single value and an array, like $prefix
 
-/*global console*/
 
 var fs     = require('fs'),
     path   = require('path'),
@@ -25,8 +24,8 @@ var fs     = require('fs'),
 */
 function compose(/* ... */) {
     var run = [].slice.call(arguments),
-    context;  
-    
+    context;
+
     if (typeof run[0] === 'object') {
         context = run.shift();
     }
@@ -57,7 +56,7 @@ function acomposeMaker(args) {
     }
 
     for (var i = 0, i_max = args.length; i < i_max; i += 1) {
-        run[i] = function (/* args */) { 
+        run[i] = function (/* args */) {
             var that = this,
                 myargs = [].slice.call(arguments);
             if (that.__callback) {
@@ -67,18 +66,19 @@ function acomposeMaker(args) {
                     }
                     return that.__callback.call(that.__callback, output);
                 });
-                args[that.__idx].apply(null, myargs);
+                // TODO Context instead of null
+                return that.__self.apply(null, myargs);
             } else {
-                return args[that.__idx].apply(null, myargs);
+                return that.__self.apply(null, myargs);
             }
         };
     }
 
     for (var j = 0, j_max = run.length - 1; j < j_max; j += 1) {
+        run[j].__self     = args[j];
         run[j].__callback = run[j + 1];
-        run[j].__idx = j;
     }
-    run[j].__idx = j;
+    run[j].__self = args[j];
     return run[0];
 }
 
@@ -95,7 +95,7 @@ function acompose() {
     };
 }
 
-// Courtesy of vows code
+// From vows
 var esc = String.fromCharCode(27),
     styles = {
     'bold'      : [1,  22],
@@ -109,12 +109,8 @@ var esc = String.fromCharCode(27),
     'green-hi'  : [92, 32],
 };
 
-function isArray(arg) {
-    return Object.prototype.toString.call(arg) === '[object Array]';
-}
-
 function pass(func, arg) {
-    if (isArray(arg)) {
+    if (Array.isArray(arg)) {
         return arg.map(func);
     }
     return func.call(arg);
@@ -123,12 +119,6 @@ function pass(func, arg) {
 var sprot = String.prototype;
 
 
-// Shell access:
-// Left to right
-// input may be stream or string: $(_pipe(_cmd('cat file')
-
-
-// String functions
 module.exports = {
     // Composing
     $: compose,
@@ -211,21 +201,6 @@ module.exports = {
             return string.match(regex);
         };
     },
-    // Html generation -- dubious
-    $link: function (url) {
-        return function (string) {
-            return string.anchor(url);
-        };
-    },
-    $italics: function (value) {
-        return pass(sprot.italics, value);
-    },
-    $fixed: function (value) {
-        return pass(sprot.fixed, value);
-    },
-    $bold: function (value) {
-        return pass(sprot.bold, value);
-    },
     // Other string functions
     $prefix: function (str) {
         return function (arg) {
@@ -254,6 +229,21 @@ module.exports = {
         return function (str) {
             return [esc, '[', styles[style][0], 'm', str, esc, '[', styles[style][1], 'm'].join('');
         };
+    },
+    // Html generation -- dubious
+    $link: function (url) {
+        return function (string) {
+            return string.anchor(url);
+        };
+    },
+    $italics: function (value) {
+        return pass(sprot.italics, value);
+    },
+    $fixed: function (value) {
+        return pass(sprot.fixed, value);
+    },
+    $bold: function (value) {
+        return pass(sprot.bold, value);
     },
     // Array functions
     $join: function (delim) {
@@ -316,6 +306,7 @@ module.exports = {
         };
     },
     $sort: function (sorter) {
+        // TODO
     },
     $reverse: function () {
         return function (array) {
@@ -331,11 +322,32 @@ module.exports = {
     // Apply the function on each element of an array or on a single arg
     $each: function (func) {
         return function (arg) {
-            if (isArray(arg)) {
+            if (Array.isArray(arg)) {
                 return arg.map(func);
             }
             return func(arg);
         };
+    },
+    // Pythonish
+    $zip: function (array) {
+        var l = [], r = [];
+        for  (var i = 0, i_max = array.length; i < i_max; i += 2) {
+            l.push(array[i]);
+            r.push(array[i + 1]);
+        }
+        return [l, r];
+    },
+    $unzip: function (array) {
+        var result = [], l = array[0], r = array[1];
+        if (l.length > r.length) {
+            var tmp = l;
+            l = r;
+            r = tmp;
+        }
+        for  (var i = 0, i_max = l.length; i < i_max; i += 1) {
+            result.push(l[i], r[i]);
+        }
+        return result;
     },
     // boolean binOps
     $gt: function (val) {
@@ -436,16 +448,16 @@ module.exports = {
             cmd  = args.shift();
 
     },
-    _exec: function (cmd) {
+    _exec: function (cmd, cb) {
         return function (str) {
-            var run = cmd.replace('$1', '"' + str + '"')
+            var run = cmd.replace('$1', '"' + str + '"');
             childp.exec(run, function (err, stdout, stderr) {
                 if (err) {
                     cb('Exec failed: ' + stderr);
                 }
                 cb(stdout);
             });
-        }
+        };
     },
     _pipe: function (cmd) {
 
@@ -477,7 +489,7 @@ module.exports = {
         });
         stream.resume();
     },
-    _run: function (cmd) {
+    _run: function (/* args */) {
         var args  = [].slice.call(arguments),
             first = args[0].split(/ /),
             cmd   = first.shift();
@@ -554,40 +566,20 @@ module.exports = {
         };
     },
     // Arrays - Take out elements from an array
-    $take: function (/* args */) {
-        var args = [].slice.call(arguments);
-        if (args.length === 1) {
+    $take: function (/* indexes */) {
+        var indexes = [].slice.call(arguments);
+        if (indexes.length === 1) {
             return function (array) {
-                return array[args[0]];
+                return array[indexes[0]];
             };
         }
         return function (array) {
             var result = [];
-            for  (var i = 0, i_max = args.length; i < i_max; i += 1) {
-                result.push(array[args[i]]);
+            for  (var i = 0, i_max = indexes.length; i < i_max; i += 1) {
+                result.push(array[indexes[i]]);
             }
             return result;
         };
-    },
-    $zip: function (array) {
-        var l = [], r = [];
-        for  (var i = 0, i_max = array.length; i < i_max; i += 2) {
-            l.push(array[i]);
-            r.push(array[i + 1]);
-        }
-        return [l, r];
-    },
-    $unzip: function (array) {
-        var result = [], l = array[0], r = array[1];
-        if (l.length > r.length) {
-            var tmp = l;
-            l = r;
-            r = tmp;
-        }
-        for  (var i = 0, i_max = l.length; i < i_max; i += 1) {
-            result.push(l[i], r[i]);
-        }
-        return result;
     },
     // Call a function and return its argument also
     $keep: function (func) {
