@@ -66,7 +66,6 @@ with (composer) {
 }
 filterFile('testfile', 'testfile-filtered');
 
-
 // Read a file with a list of files, stat the files and write the stats to a new file
 with (composer) {
     var statDirs = function (infile, outfile) {
